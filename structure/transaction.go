@@ -12,6 +12,7 @@ type (
 		From  string
 		To    string
 		Value int
+		//IsValid int
 		// Signature PubKeySign
 	}
 
@@ -21,6 +22,7 @@ type (
 		From   string
 		To     string
 		Value  int
+		//IsValid int
 		// Signature PubKeySign
 	}
 
@@ -30,16 +32,17 @@ type (
 		From      string
 		To        string
 		Value     int
+		//IsValid   int
 		// Signature PubKeySign
 	}
 
-	// 2000笔交易1个batch
-	TransactionBatch struct {
-		Shard    uint
-		Abstract string
-		PubIndex []int
-		Sig      PubKeySign
-	}
+	//// 2000笔交易1个batch
+	//TransactionBatch struct {
+	//	Shard    uint
+	//	Abstract string
+	//	PubIndex []int
+	//	Sig      PubKeySign
+	//}
 )
 
 func MakeInternalTransaction(s int, from string, to string, value int) Witnesstrans {

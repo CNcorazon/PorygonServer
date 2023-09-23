@@ -36,20 +36,21 @@ type (
 	Proposal struct {
 		Shard         uint
 		Height        uint
-		InternalBatch []TransactionBatch
-		CrossBatch    []TransactionBatch
-		SuperBatch    []TransactionBatch
+		InternalBatch []Batchtrans
+		CrossBatch    []Batchtrans
+		SuperBatch    []Batchtrans
 	}
 
 	// ProposalBlock 共识阶段：排序委员会提出的proposal block
 	ProposalBlock struct {
-		Id           string
-		IdList       []string
-		Height       int
-		Hash         string     //前一个区块的hash
-		Root         GSRoot     //状态树树根
-		ProposalList []Proposal //交易列表
-		Vrf          int        //vrf
+		Id            string
+		IdList        []string
+		LockedAccount []int
+		Height        int
+		Hash          string     //前一个区块的hash
+		Root          GSRoot     //状态树树根
+		ProposalList  []Proposal //交易列表
+		Vrf           int        //vrf
 	}
 
 	BlockHeader struct {
@@ -65,6 +66,7 @@ type (
 	BlockBody struct {
 		// Shard            uint
 		Height           uint
+		LockedAccount    []int
 		TransactionLists []Proposal
 		// SuperTransaction SuperTransactionBlock
 	}
@@ -92,14 +94,14 @@ type (
 	}
 )
 
-func (r *TransactionBlock) CalculateRoot() string {
-	jsonString, err := json.Marshal(r)
-	if err != nil {
-		log.Fatalln("计算交易区块Root失败")
-	}
-	byte32 := sha256.Sum256(jsonString)
-	return hex.EncodeToString(byte32[:])
-}
+//func (r *TransactionBlock) CalculateRoot() string {
+//	jsonString, err := json.Marshal(r)
+//	if err != nil {
+//		log.Fatalln("计算交易区块Root失败")
+//	}
+//	byte32 := sha256.Sum256(jsonString)
+//	return hex.EncodeToString(byte32[:])
+//}
 
 func MakeHorizonBlockChain(n int, shardNum int) *HorizonBlockChain {
 	state := InitState(n, shardNum)
@@ -128,7 +130,7 @@ func NewNodeNum() *NodeNum {
 	return &N
 }
 
-//验证共识区块是否应该被添加到链上
+// VerifyBlock 验证共识区块是否应该被添加到链上
 func (a *HorizonBlockChain) VerifyBlock(b Block) error {
 	//检测区块序列号是否符合
 	MinVote := math.Max(0, math.Floor(2*float64(ProposerNum/3)))
@@ -183,28 +185,23 @@ func (a *HorizonBlockChain) AppendBlock(b Block) error {
 
 func GetHeight() int {
 	latestBlock := Blocks{}
-	// ChainDB.Order("Height DESC").First(&latestBlock)
-	// 没有数据则返回空值
 	tx := ChainDB.Begin()
-	// if err := tx.Set("gorm:query_option", "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE").Error; err != nil {
-	// 	tx.Rollback()
-	// 	return -1
-	// }
 	tx.Order("Height DESC").Limit(1).Find(&latestBlock)
 	tx.Commit()
 	height := latestBlock.Height
 	return height
 }
 
-func MakeBlock(Txlist []Proposal, height uint, gsroot GSRoot) Block {
+func MakeBlock(problock ProposalBlock, height uint, gsroot GSRoot) Block {
 	body := BlockBody{
 		// Shard:            s.Shard,
 		Height:           height,
-		TransactionLists: Txlist,
+		LockedAccount:    problock.LockedAccount,
+		TransactionLists: problock.ProposalList,
 		// SuperTransaction: SuperBlock,
 	}
 
-	root, _ := json.Marshal(Txlist)
+	root, _ := json.Marshal(problock.LockedAccount)
 	byte32 := sha256.Sum256(root)
 	tr := hex.EncodeToString(byte32[:])
 	header := BlockHeader{

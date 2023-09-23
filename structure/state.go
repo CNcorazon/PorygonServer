@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"server/logger"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -18,8 +19,6 @@ import (
 
 type (
 	State struct {
-		NewRootsVote  map[uint]map[string]int //记录各个分片新状态的投票数
-		RootsVote     map[uint]map[string]int //收到足够多投票的树根
 		NewAccountMap map[uint]map[string]*Account
 		AccountMap    map[uint]map[string]*Account
 		Mu            sync.RWMutex
@@ -27,18 +26,25 @@ type (
 
 	State4Client struct {
 		NewRootsVote map[uint]map[string]int //记录各个分片新状态的投票数
-		Tx_num       int                     //验证的交易数量
+		TxNum        int                     //验证的交易数量
 	}
 
 	Account struct {
+		Id      int
 		Shard   uint
 		Address string
 		Value   int
 		Lock    chan struct{} `json:"-"`
 	}
+
+	AccountList []Account
 )
 
-//执行分片计算分片的状态
+func (a AccountList) Len() int           { return len(a) }
+func (a AccountList) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a AccountList) Less(i, j int) bool { return a[i].Id < a[j].Id }
+
+// CalculateRoot 执行分片计算分片的状态
 func (s *State) CalculateRoot() string {
 	// logger.AnalysisLogger.Println(s.NewAccountMap)
 	jsonString, err := json.Marshal(s.NewAccountMap)
@@ -56,7 +62,7 @@ func (s *State) CalculateRoot() string {
 
 // }
 
-func UpdateChain(tranblocks TransactionBlock, height uint, s *State) {
+func UpdateAccount(tranblocks TransactionBlock, s *State) {
 	//处理内部交易
 	// var SuList map[uint][]SuperTransaction
 	// SuList := make(map[uint][]SuperTransaction)
@@ -76,13 +82,11 @@ func UpdateChain(tranblocks TransactionBlock, height uint, s *State) {
 	for shardNum, tran := range tranblocks.CrossShardList {
 		//处理跨分片交易
 		for _, tx := range tran {
-			ExcuteCross(tx, height, s, int(shardNum))
+			ExcuteCross(tx, s, int(shardNum))
 			// SuList[shardNum] = append(SuList[shardNum], *res)
 		}
 	}
-	// relayBlock := SuperTransactionBlock{
-	// 	SuperTransaction: SuList,
-	// }
+
 }
 
 func ExcuteInteral(i InternalTransaction, s *State, shardNum int) {
@@ -106,18 +110,6 @@ func ExcuteInteral(i InternalTransaction, s *State, shardNum int) {
 		return
 	}
 
-	//对账户加锁
-	// if Payer < Beneficiary {
-	// 	s.AccountMap[uint(shardNum)][Payer].Mu.Lock()
-	// 	s.AccountMap[uint(shardNum)][Beneficiary].Mu.Lock()
-	// } else {
-	// 	s.AccountMap[uint(shardNum)][Beneficiary].Mu.Lock()
-	// 	s.AccountMap[uint(shardNum)][Payer].Mu.Lock()
-	// }
-
-	// defer s.AccountMap[uint(shardNum)][Payer].Mu.Unlock()
-	// defer s.AccountMap[uint(shardNum)][Beneficiary].Mu.Unlock()
-
 	value1 := s.AccountMap[uint(shardNum)][Payer].Value - Value
 	s.NewAccountMap[uint(shardNum)][Payer].Value = value1
 
@@ -125,7 +117,7 @@ func ExcuteInteral(i InternalTransaction, s *State, shardNum int) {
 	s.NewAccountMap[uint(shardNum)][Beneficiary].Value = value2
 }
 
-func ExcuteCross(e CrossShardTransaction, height uint, s *State, shardNum int) *SuperTransaction {
+func ExcuteCross(e CrossShardTransaction, s *State, shardNum int) *SuperTransaction {
 	if uint(shardNum) != e.Shard1 {
 		log.Fatalln("该交易的发起用户不是本分片账户")
 		return nil
@@ -136,9 +128,6 @@ func ExcuteCross(e CrossShardTransaction, height uint, s *State, shardNum int) *
 		log.Fatalf("该交易的付款者不是本分片的账户")
 		return nil
 	}
-
-	// s.AccountMap[uint(shardNum)][Payer].Mu.Lock()
-	// defer s.AccountMap[uint(shardNum)][Payer].Mu.Unlock()
 
 	s.NewAccountMap[uint(shardNum)][Payer].Value = s.AccountMap[uint(shardNum)][Payer].Value - e.Value
 	res := SuperTransaction{
@@ -162,15 +151,14 @@ func ExcuteRelay(r SuperTransaction, s *State, shardNum int) {
 		log.Fatalf("该交易的收款者不是本分片的账户")
 		return
 	}
-	// s.AccountMap[uint(shardNum)][Beneficiary].Mu.Lock()
-	// defer s.AccountMap[uint(shardNum)][Beneficiary].Mu.Unlock()
 
 	s.NewAccountMap[uint(shardNum)][Beneficiary].Value = s.AccountMap[uint(shardNum)][Beneficiary].Value + r.Value
 }
 
-//获取当前所有的账户的状态
+// GetAccountList 获取当前所有的账户的状态
 func (s *State) GetAccountList() []Account {
-	var acc []Account
+	var acc AccountList
+
 	s.Mu.RLock()
 	defer s.Mu.RUnlock()
 	for i := 1; i <= ShardNum; i++ {
@@ -178,6 +166,8 @@ func (s *State) GetAccountList() []Account {
 			acc = append(acc, *v)
 		}
 	}
+	// Sort the accounts based on your criteria, here we sort by Account.ID
+	sort.Sort(acc)
 	return acc
 }
 
@@ -189,7 +179,7 @@ func (s *State) GetAddressList(shardNum int) []string {
 	return addressList
 }
 
-//为执行分片初始化生成n*shardNum个AccountList
+// InitAccountList 为执行分片初始化生成n*shardNum个AccountList
 func (s *State) InitAccountList(shardNum int, n int) {
 	addressList := GenerateAddressList(n)
 	for j := 1; j <= shardNum; j++ {
@@ -201,6 +191,7 @@ func (s *State) InitAccountList(shardNum int, n int) {
 		lock <- struct{}{}
 		for i := 0; i < n; i++ {
 			acc := Account{
+				Id:      (j-1)*n + i,
 				Shard:   uint(j),
 				Address: addressList[i+AccountNum*(j-1)],
 				Value:   100000, //初始化的Value设置
@@ -250,22 +241,14 @@ func GenerateAddressList(n int) []string {
 	return res
 }
 
-//初始化构建所有分片的全局状态
-//n表示每个执行分片中需要初始化的账户数目
+// InitState 初始化构建所有分片的全局状态
+// n表示每个执行分片中需要初始化的账户数目
 func InitState(n int, shardNum int) *State {
 	state := State{
-
-		NewRootsVote:  make(map[uint]map[string]int),
-		RootsVote:     make(map[uint]map[string]int),
 		NewAccountMap: make(map[uint]map[string]*Account),
 		AccountMap:    make(map[uint]map[string]*Account),
 		Mu:            sync.RWMutex{},
 	}
-	for i := 1; i <= shardNum; i++ {
-		state.NewRootsVote[uint(i)] = make(map[string]int)
-		state.RootsVote[uint(i)] = make(map[string]int)
-	}
-
 	return &state
 }
 
@@ -279,13 +262,36 @@ func InitState(n int, shardNum int) *State {
 // }
 
 func UpdateChainWithBlock(b Block, s *State) {
-	//检查各个分片状态root合不合法，将状态更新到最新，然后再执行交易
+	// 从数据库中读取交易
+	txBlocks := packTx4ServerUpdate()
+	// 根据交易（和区块中的交易是对应的）更新账户（NewAccount）
+	UpdateAccount(txBlocks, s)
+	// 检查收到的root是否超过阈值，超过则用NewAccount替换真实的Account
 	VerifyGSRoot(b.Header.StateRoot.Vote, s)
+}
+
+func packTx4ServerUpdate() TransactionBlock {
+	height := GetHeight()
+	IntList := make(map[uint][]InternalTransaction)
+	CroList := make(map[uint][]CrossShardTransaction)
+	ReList := make(map[uint][]SuperTransaction)
+	for shard := 1; shard <= ShardNum; shard++ {
+		Int, Cro, Sup, _, _, _ := PackValidateTrans(height-1, shard)
+		IntList[uint(shard)] = append(IntList[uint(shard)], Int...)
+		CroList[uint(shard)] = append(CroList[uint(shard)], Cro...)
+		ReList[uint(shard)] = append(ReList[uint(shard)], Sup...)
+	}
+	return TransactionBlock{
+		Height:         uint(height),
+		InternalList:   IntList,
+		CrossShardList: CroList,
+		SuperList:      ReList,
+	}
 }
 
 func VerifyGSRoot(vote map[uint]map[string]int, s *State) {
 	// MinVote := math.Max(1, math.Floor(2*(CLIENT_MAX-ProposerNum/ShardNum)/3))
-	MinVote := 1
+	MinVote := CLIENT_MAX * 2 / 3
 	isValid := false
 	num := 0
 	for i := 1; i <= ShardNum; i++ {
@@ -298,9 +304,10 @@ func VerifyGSRoot(vote map[uint]map[string]int, s *State) {
 			}
 		}
 		if isValid {
-			logger.AnalysisLogger.Printf("树根验证成功")
-			num += Source.ClientShard[uint(i)].AccountState.Tx_num
+
+			num += Source.ClientShard[uint(i)].AccountState.TxNum
 			s.AccountMap[uint(i)] = s.NewAccountMap[uint(i)]
+			logger.AnalysisLogger.Printf("树根验证成功,成功上链数量:", num)
 		} else {
 			logger.AnalysisLogger.Printf("树根验证失败")
 		}

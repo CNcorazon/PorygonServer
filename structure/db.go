@@ -29,12 +29,13 @@ type Witnesstrans struct {
 }
 
 type Batchtrans struct {
-	Id        int `gorm:"primaryKey"` //作为主键索引
-	Shard     int
-	Abstract  string
-	PubIndex  string `gorm:"default:' '"`
-	Sig       string `gorm:"default:' '"`
-	TransType int    //0 for internal, 1 for external, 2 for super
+	Id             int
+	Shard          int
+	Abstract       string
+	RelatedAccount []int // 第一维是内部交易的，第二维是跨分片from方的，第三维是跨分片to方的
+	PubIndex       []int
+	Sig            string
+	TransType      int
 }
 
 // func (User) TableName() string {
