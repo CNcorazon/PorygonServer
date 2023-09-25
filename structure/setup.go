@@ -8,13 +8,13 @@ import (
 const (
 	MAX        = 1000000000
 	ShardNum1  = 2
-	AccountNum = 40000
+	AccountNum = 4000
 	CLIENT_MAX = 10 // 每个分片中的ExeClients数量
 
-	TX_NUM1          = 200000 // 每个分片的交易数
-	ProposerNum1     = 10     // 总共的OrderClients数量
-	ValidateTxNum1   = 5000   // 每个验证节点验证的交易数
-	SIGN_VERIFY_TIME = 4      //millisecond
+	TX_NUM1          = 20000 // 每个分片的交易数
+	ProposerNum1     = 10    // 总共的OrderClients数量
+	ValidateTxNum1   = 500   // 每个验证节点验证的交易数
+	SIGN_VERIFY_TIME = 4     //millisecond
 	ICMPCOUNT        = 3
 	INGTIME          = 300
 	ServerNum        = 1

@@ -25,33 +25,7 @@ import (
 
 // PreRegister OrderClient登录进数据库（节点预登记）
 func PreRegister(c *gin.Context) {
-	var BlockHeight int64
-	// 读取区块高度
-	tx2 := structure.ChainDB.Begin()
-	if err := tx2.Model(&structure.Blocks{}).Count(&BlockHeight).Error; err != nil {
-		return
-	}
-	tx2.Commit()
-	// 写入clientDB
-	tx1 := structure.ClientDB.Begin()
-	client := structure.Clients{
-		Shard:      111,
-		Height:     int(BlockHeight) + 1,
-		ClientType: 0,
-	}
-	if err := tx1.Create(&client).Error; err != nil {
-		tx1.Rollback()
-		logger.AnalysisLogger.Printf("插入失败")
-		return
-	}
-
-	if err := tx1.Commit().Error; err != nil {
-		tx1.Rollback()
-		logger.AnalysisLogger.Printf("提交失败")
-	}
-	res := model.ShardNumResponse{
-		ShardNum: uint(12138),
-	}
+	res := model.PreRegister()
 	c.JSON(200, res)
 }
 
